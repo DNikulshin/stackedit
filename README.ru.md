@@ -51,6 +51,11 @@ docker run -d --name stackedit -p 8080:8080 ghcr.io/dnikulshin/stackedit:latest
 
 Подробно — [docs/ru/quickstart.md](docs/ru/quickstart.md) (ПК и телефон, без сборки).
 
+Сомневаетесь, установится ли сборка: `node scripts/check-installability.mjs dist-static` — тот же
+набор проверок, что в DevTools → Application → Manifest. Если Chrome писал «Файл манифеста
+отсутствует или недоступен для чтения» — это ошибка страницы `chrome://extensions`
+(каталог грузили как расширение), а не установки приложения.
+
 ## Сборка из исходников
 
 ```bash
