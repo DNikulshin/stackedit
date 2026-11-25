@@ -87,6 +87,40 @@ Service Workers → Update, либо «Clear storage» и перезагрузк
 инкогнито, смена профиля, удаление PWA на iOS, разные адреса (`localhost` и `192.168.x.x` — разные
 хранилища!). Экспорт: `Ctrl+S` → Import/Export.
 
+## Docker
+
+**`docker pull` падает с `net/http: timeout awaiting response headers`** — Docker Hub недоступен из РФ.
+Берите базовый образ через зеркало:
+
+```bash
+docker build -f docker/Dockerfile -t stackedit-local \
+  --build-arg BASE_IMAGE=mirror.gcr.io/library/debian:trixie-slim .
+```
+
+Проверено: `mirror.gcr.io` работает, `dockerhub.timeweb.cloud` отвечает, `docker.m.daocloud.io`
+отвечает, но медленно. Подробности — в [self-host.md](self-host.md), раздел 4.
+
+**`apt-get update` в `node:14-buster`: `does not have a Release file`** — Debian 10 переехал в
+`archive.debian.org`. Не берите `node:14-*` как базовый образ: нужен актуальный Debian + Node 14
+из тарбола (как в `docker/Dockerfile`).
+
+**Контейнер падает: `Cannot find module 'express'`** — если вы использовали `npm prune --production`
+или `npm install --production`: `express` в апстриме объявлен в `devDependencies`, хотя серверу
+(`index.js`) нужен в рантайме. Перенесите его в `dependencies` перед установкой: так сделано в
+`docker/Dockerfile` (315 МБ `node_modules` вместо 568 МБ с dev-набором).
+
+**`docker: command not found`, хотя демон работает** (бывает, когда стоит только `dockerd`, а CLI — нет).
+Клиент — один статический бинарник:
+
+```bash
+curl -fL -o /tmp/docker.tgz \
+  https://mirrors.aliyun.com/docker-ce/linux/static/stable/x86_64/docker-29.7.2.tgz
+tar xzf /tmp/docker.tgz docker/docker && install -m 755 docker/docker ~/.local/bin/docker
+docker version    # клиент 29.7.2 + сервер 29.8.0 — проверено
+```
+
+Если сокет `/var/run/docker.sock` есть, а доступа нет: пользователь должен быть в группе `docker`.
+
 ## Провайдеры и экспорт
 
 **Нет пунктов «Sync with GitHub», «Export to Google Drive»** — в `/conf` нет ключей: задайте

@@ -145,19 +145,53 @@ GitLab, Gist (через GitHub-токен), CouchDB, Blogger/Zendesk — см. 
 Проверить у себя, что OAuth реально проходит, можно только создав приложение в консоли провайдера —
 в рамках подготовки этой сборки ключи не заводились.
 
-## 4. Docker
+## 4. Docker (проверено)
 
-Самодостаточный образ (в апстриме `Dockerfile` тянет `benweet/stackedit-base` с Docker Hub, где лежит
-старый тулчейн; здесь Node 14 ставится явно). Файл — `docker/Dockerfile`:
+`docker/Dockerfile` — самодостаточный двухэтапный образ: на первом этапе ставится Node 14 и собирается
+`dist/`, на втором — только рантайм (Node 14 + продакшн-зависимости + `dist`). Апстримный Dockerfile
+тянет `benweet/stackedit-base` с Docker Hub, где старый тулчейн, поэтому тут он не используется.
 
 ```bash
+git clone https://github.com/DNikulshin/stackedit.git
+cd stackedit
 docker build -f docker/Dockerfile -t stackedit-local .
-docker run -d --name stackedit -p 8080:8080 \
-  -e PORT=8080 stackedit-local
+docker run -d --name stackedit -p 8080:8080 stackedit-local
+# → http://localhost:8080/app
 ```
 
-Дальше — Caddy/nginx перед ним, как в разделе 2. Сборка образа требует доступа к npm-реестру и GitHub
-(бинарник node-sass). В рамках этой документации образ не проверялся: на машине сборки нет Docker.
+Результат проверки: сборка 3–6 минут, образ 731 МБ, контейнер поднимается сразу `healthy`
+(HEALTHCHECK стучит в `/conf`), `/app` и `/conf` отвечают 200, Service Worker активируется,
+офлайн-перезагрузка работает.
+
+### Docker Hub из России
+
+`docker pull` с `registry-1.docker.io` падает с `net/http: timeout awaiting response headers`,
+поэтому базовый образ берём через зеркало:
+
+```bash
+docker build -f docker/Dockerfile -t stackedit-local \
+  --build-arg BASE_IMAGE=mirror.gcr.io/library/debian:trixie-slim .
+```
+
+Что проверено с этого хоста: `mirror.gcr.io` — работает, `dockerhub.timeweb.cloud` — отвечает,
+`docker.m.daocloud.io` — отвечает, но медленно, `dockerproxy.net` / `hub-mirror.c.163.com` — не
+отвечают. Если Docker Hub у вас доступен — собирайте без `--build-arg`.
+
+Дальше — Caddy/nginx перед контейнером, как в разделе 2 (внутри контейнера порт 8080).
+Обслуживание: `docker logs -f stackedit`, `docker restart stackedit`, `docker rm -f stackedit`.
+
+Как и в других вариантах, в контейнере нет `pandoc`/`wkhtmltopdf` и бэкенда проверки спонсорства —
+экспорт в PDF и через Pandoc не работает (ограничение бэкенда stackedit.io, не сборки).
+
+### Два подводных камня (учтены в Dockerfile)
+
+- **`node:14-buster` больше не годится**: Debian 10 переехал в `archive.debian.org`, и
+  `apt-get update` в этом образе падает с `does not have a Release file`. Нужен актуальный Debian
+  плюс Node 14 из тарбола (как в `scripts/build-local.sh`).
+- **`express` в апстриме лежит в `devDependencies`** (сервер из `index.js` требует его в рантайме).
+  `npm prune --production` его выкидывает → контейнер падает с `Cannot find module 'express'`.
+  В образе express переносится в `dependencies` перед `npm install --only=production`; проверено,
+  что это даёт 315 МБ `node_modules` вместо 568 МБ с dev-набором.
 
 ## 5. Домашний сервер + туннель (без VPS и белого IP)
 
