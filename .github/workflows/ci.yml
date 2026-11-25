@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [master]
+    branches: [main]
     tags: ['v*']   # по тегу собирается релиз с готовым архивом
   pull_request:
   workflow_dispatch:
@@ -150,7 +150,7 @@ jobs:
         run: docker logs stackedit-ci || true
 
       - name: Публикация образа в GHCR
-        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: |
           set -eux
           image="ghcr.io/${GITHUB_REPOSITORY,,}"
