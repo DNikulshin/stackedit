@@ -4,24 +4,40 @@
 # Если что-то из них 404 — SW не установится, а значит не будет ни офлайна, ни установки PWA.
 #
 # Использование:
-#   ./scripts/check-static.sh [каталог]      # по умолчанию dist-static/
+#   ./scripts/check-static.sh [каталог] [--base /путь/]
+#   --base не обязателен: без него base выводится из index.html проверяемого каталога
+#   (по путям к static/), поэтому dist-pages больше не даёт ложных FAIL про start_url и /app.
 #
 # Зависимости: python3 и curl (больше ничего).
 
 set -euo pipefail
 
 DIR="dist-static"
-BASE="/"
+BASE=""
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --base) BASE="${2:?--base требует значение}"; shift 2 ;;
     *) DIR="$1"; shift ;;
   esac
 done
+[ -f "$DIR/sw.js" ] || { echo "Нет $DIR/sw.js — сначала выполните ./scripts/prepare-static.sh" >&2; exit 1; }
+
+# base по умолчанию — тот, под который сделан сам каталог: prepare-static.sh оставляет
+# в index.html пути вида <base>static/…, иначе проверка ругалась бы на чужой base
+# (start_url, /app/ в precache) и на 404 по всем статическим файлам.
+if [ -z "$BASE" ]; then
+  FIRST_ASSET=$(grep -oE '(href|src)="?[^"[:space:]>]*static/' "$DIR/index.html" 2>/dev/null | head -1 || true)
+  if [ -z "$FIRST_ASSET" ]; then
+    echo "Не удалось определить base по $DIR/index.html — укажите его через --base" >&2
+    exit 1
+  fi
+  BASE="${FIRST_ASSET#*=}"   # href=/stackedit/static/ → /stackedit/static/
+  BASE="${BASE%static/}"     # → /stackedit/
+fi
 case "$BASE" in /*) ;; *) BASE="/$BASE" ;; esac
 case "$BASE" in */) ;; *) BASE="$BASE/" ;; esac
 PORT="${PORT:-8097}"
-[ -f "$DIR/sw.js" ] || { echo "Нет $DIR/sw.js — сначала выполните ./scripts/prepare-static.sh" >&2; exit 1; }
+echo "Каталог: $DIR, base=$BASE"
 
 # Для base != / каталог должен быть доступен по этому пути: раздаём временный корень
 # со симлинком <base> -> каталог.
