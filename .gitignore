@@ -12,3 +12,5 @@ chrome-app/*.zip
 dist-static/
 *.tar.gz
 *.zip
+dist-pages/
+dist-preview/

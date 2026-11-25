@@ -79,6 +79,31 @@ jobs:
             --notes "Готовый архив dist-static: распакуйте и раздайте любым статическим сервером (см. docs/ru/quickstart.md). Собран скриптом scripts/build-local.sh на Node 14." \
             || gh release upload "$tag" stackedit-pwa-*.tar.gz stackedit-pwa-*.zip --clobber
 
+  # Сборка для подкаталога (GitHub Pages) и проверка установки PWA на этом пути
+  subpath:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Сборка под base=/stackedit/
+        run: ./scripts/build-local.sh --base /stackedit/
+
+      - name: Подготовка каталога для статики
+        run: ./scripts/prepare-static.sh dist-pages --base /stackedit/
+
+      - name: Все URL из precache отдают 200
+        run: PORT=8098 ./scripts/check-static.sh dist-pages --base /stackedit/
+
+      - name: Chrome считает сборку устанавливаемой из-под подкаталога
+        run: node scripts/check-installability.mjs dist-pages --base /stackedit/
+
+      - name: Проверка скрипта публикации на Pages (без push)
+        run: ./scripts/deploy-pages.sh dist-pages --dry-run
+
   # Сборка Docker-образа и smoke-тест контейнера
   docker:
     runs-on: ubuntu-latest

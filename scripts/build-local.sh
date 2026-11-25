@@ -5,8 +5,10 @@
 # требует Node <= 14: node-sass 4, webpack 2), ставит зависимости и собирает dist/.
 #
 # Использование:
-#   ./scripts/build-local.sh            # полная сборка
-#   ./scripts/build-local.sh --clean    # пересоздать node_modules и dist
+#   ./scripts/build-local.sh                     # полная сборка (base=/)
+#   ./scripts/build-local.sh --clean             # пересоздать node_modules и dist
+#   ./scripts/build-local.sh --base /stackedit/  # сборка для раздачи из подкаталога
+#                                                # (GitHub Pages проекта, /preview/имя/ и т.п.)
 #
 # Требуется: bash, curl или wget, tar, git, ~2.5 ГБ на диске.
 # Проверено на Linux x64; для macOS архитектура определяется автоматически.
@@ -62,7 +64,19 @@ fi
 export PATH="$NODE_DIR/bin:$PATH"
 log "Node $(node -v), npm $(npm -v)"
 
-if [ "${1:-}" = "--clean" ]; then
+CLEAN=0
+BASE="/"
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --clean) CLEAN=1; shift ;;
+    --base) BASE="${2:?--base требует значение}"; shift 2 ;;
+    *) die "неизвестный аргумент: $1" ;;
+  esac
+done
+case "$BASE" in /*) ;; *) BASE="/$BASE" ;; esac
+case "$BASE" in */) ;; *) BASE="$BASE/" ;; esac
+
+if [ "$CLEAN" -eq 1 ]; then
   log "Удаляю node_modules и dist"
   rm -rf "$ROOT/node_modules" "$ROOT/dist"
 fi
@@ -87,8 +101,8 @@ log "gulp build-prism"
 npx gulp build-prism
 
 # 4. Продакшн-сборка (webpack + отдельный проход по стилям).
-log "npm run build"
-npm run build
+log "npm run build (STACKEDIT_BASE=$BASE)"
+STACKEDIT_BASE="$BASE" npm run build
 
-log "Готово. Каталог сборки: $ROOT/dist"
+log "Готово. Каталог сборки: $ROOT/dist (base=$BASE)"
 log "Запуск: PATH=\"$NODE_DIR/bin:\$PATH\" node . и открыть http://localhost:8080/app"

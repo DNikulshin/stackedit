@@ -52,6 +52,23 @@ certbot --nginx -d md.example.com     # сертификат Let's Encrypt
 GitHub-синхронизации и PDF-экспорта. Всё остальное (редактор, файлы, офлайн, установка как приложение)
 работает.
 
+## 1a. GitHub Pages (бесплатный HTTPS, без сервера)
+
+Подкаталог `<user>.github.io/<repo>/` — base равен `/<repo>/`:
+
+```bash
+./scripts/build-local.sh --base /stackedit/
+./scripts/prepare-static.sh dist-pages --base /stackedit/
+./scripts/check-static.sh dist-pages --base /stackedit/
+node scripts/check-installability.mjs dist-pages --base /stackedit/
+./scripts/deploy-pages.sh dist-pages
+gh api -X POST repos/<user>/<repo>/pages -f 'source[branch]=gh-pages' -f 'source[path]=/'
+```
+
+Если у аккаунта настроен свой домен (как `dnikulshin.ru`), проектный Pages открывается по
+`https://<домен>/<repo>/` — этот адрес и раздаётся, и на нём же проверена установка PWA.
+`deploy-pages.sh` сверяет `base` сборки с именем репозитория и предупреждает, если они расходятся.
+
 ## 2. Node-сервер из репозитория (Caddy + systemd)
 
 Нужен, если хотите GitHub OAuth и посадочную страницу апстрима.

@@ -10,13 +10,34 @@
 
 set -euo pipefail
 
-DIR="${1:-dist-static}"
+DIR="dist-static"
+BASE="/"
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --base) BASE="${2:?--base требует значение}"; shift 2 ;;
+    *) DIR="$1"; shift ;;
+  esac
+done
+case "$BASE" in /*) ;; *) BASE="/$BASE" ;; esac
+case "$BASE" in */) ;; *) BASE="$BASE/" ;; esac
 PORT="${PORT:-8097}"
 [ -f "$DIR/sw.js" ] || { echo "Нет $DIR/sw.js — сначала выполните ./scripts/prepare-static.sh" >&2; exit 1; }
 
-python3 -m http.server "$PORT" --directory "$DIR" >/dev/null 2>&1 &
+# Для base != / каталог должен быть доступен по этому пути: раздаём временный корень
+# со симлинком <base> -> каталог.
+if [ "$BASE" = "/" ]; then
+  SERVE_ROOT="$DIR"
+else
+  SERVE_ROOT="$(mktemp -d)"
+  LINK="$SERVE_ROOT$(printf '%s' "$BASE" | sed 's:/$::')"
+  mkdir -p "$(dirname "$LINK")"
+  ln -s "$(cd "$DIR" && pwd)" "$LINK"
+  echo "Каталог: $DIR доступен как $BASE (временный корень $SERVE_ROOT)"
+fi
+
+python3 -m http.server "$PORT" --directory "$SERVE_ROOT" >/dev/null 2>&1 &
 SRV=$!
-trap 'kill $SRV 2>/dev/null || true' EXIT
+trap 'kill $SRV 2>/dev/null || true; [ "$BASE" != "/" ] && rm -rf "$SERVE_ROOT"' EXIT
 sleep 1
 
 fail=0
@@ -31,13 +52,13 @@ check() { # url ожидаемый_код
   fi
 }
 
-echo "Служебные роуты:"
-check /app
-check /app/
-check /conf
-check /oauth2/callback
-check /sw.js
-check /index.html
+echo "Служебные роуты (base=$BASE):"
+check "${BASE}app"
+check "${BASE}app/"
+check "${BASE}conf"
+check "${BASE}oauth2/callback"
+check "${BASE}sw.js"
+check "${BASE}index.html"
 
 echo "Все URL из precache Service Worker:"
 while read -r url; do
@@ -66,16 +87,28 @@ PY
 )
 
 echo "Содержимое:"
-if grep -q '"start_url": *"/app/"' "$DIR"/manifest.*.json; then
-  echo "  ok   manifest start_url = /app/"
+if grep -qF "\"start_url\": \"${BASE}\"" "$DIR"/manifest.*.json; then
+  echo "  ok   manifest start_url = ${BASE}"
 else
-  echo "  FAIL manifest start_url не /app/ (офлайн-запуск установленного приложения сломается)"
+  echo "  FAIL manifest start_url не ${BASE} (офлайн-запуск установленного приложения сломается)"
   fail=1
 fi
-if grep -q '"/app/","/app"' "$DIR/sw.js"; then
-  echo "  ok   /app/ добавлен в precache"
+# В precache не должно быть URL без завершающего слэша для каталогов: сервер отдаёт
+# на них 301, а cache.addAll на редиректе падает — Service Worker не установится.
+if grep -qF "\"${BASE}app\"" "$DIR/sw.js"; then
+  echo "  FAIL в precache есть ${BASE}app без слэша (сервер отдаёт 301 → SW не установится)"
+  fail=1
+fi
+if grep -qF "\"${BASE}app/\"" "$DIR/sw.js"; then
+  echo "  ok   ${BASE}app/ добавлен в precache (start_url манифеста)"
 else
-  echo "  FAIL /app/ отсутствует в precache"
+  echo "  FAIL ${BASE}app/ отсутствует в precache"
+  fail=1
+fi
+if grep -qF "\"${BASE}oauth2/callback\"" "$DIR/sw.js"; then
+  echo "  ok   ${BASE}oauth2/callback в precache"
+else
+  echo "  FAIL ${BASE}oauth2/callback отсутствует в precache"
   fail=1
 fi
 

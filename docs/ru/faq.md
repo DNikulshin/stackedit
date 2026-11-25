@@ -145,6 +145,26 @@ curl -s -o /dev/null -w '%{http_code}\n' http://localhost:8080/sw.js
 **Нет кнопки «Установить приложение»** — только `https://` или `http://localhost`. По
 `http://192.168.x.x` установка недоступна (см. [phone.md](phone.md), способ 2).
 
+Проверка причин без гадания (те же проверки, что в DevTools → Application → Manifest):
+
+```bash
+node scripts/check-installability.mjs https://ваш-адрес/
+```
+
+Открытие файла двойным кликом (`file://`) Chrome отмечает как `not-from-secure-origin` и
+`no-manifest` — установка невозможна в принципе, Service Worker по `file://` не регистрируется.
+
+**SW не устанавливается на хостинге: в консоли воркера `net::ERR_BLOCKED_BY_ORB` и редиректы на
+страницу входа.** Хостинг закрыт авторизацией (Basic Auth, Authelia и т.п.): запросы из
+precache-списка `sw.js` уходят на логин (`302`), `cache.addAll` падает, воркер не активируется —
+значит нет ни офлайна, ни установки. Решение: раздавать сборку без авторизации (GitHub Pages,
+Netlify, Cloudflare Pages, обычный nginx без auth_basic).
+
+**В precache попал URL, который на хостинге отдаёт 301.** Например каталог `<base>app` без
+завершающего слэша: сервер отвечает редиректом, а `cache.addAll` на редиректе падает — Service
+Worker не установится. Поэтому `prepare-static.sh` выкладывает приложение в корень (`start_url`
+= `<base>`) и не кладёт в precache URL без слэша; `check-static.sh` это проверяет.
+
 **Офлайн не работает после установки** — первая загрузка должна пройти полностью (Service Worker
 активируется в фоне). DevTools → Application → Service Workers: статус должен быть `activated and
 running`. На iOS PWA кешируется только при запуске с домашнего экрана.

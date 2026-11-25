@@ -7,7 +7,10 @@ module.exports = {
     index: path.resolve(__dirname, '../dist/index.html'),
     assetsRoot: path.resolve(__dirname, '../dist'),
     assetsSubDirectory: 'static',
-    assetsPublicPath: '/',
+    // Путь, по которому сборка будет доступна на хостинге. Нужен, когда приложение
+    // лежит не в корне домена (проектный GitHub Pages, /preview/имя/ и т.п.):
+    //   STACKEDIT_BASE=/stackedit/ npm run build
+    assetsPublicPath: process.env.STACKEDIT_BASE || '/',
     productionSourceMap: true,
     // Gzip off by default as many popular static hosts such as
     // Surge or Netlify already gzip all static assets for you.

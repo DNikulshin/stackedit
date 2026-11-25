@@ -1,23 +1,29 @@
 #!/usr/bin/env bash
-# Готовит каталог dist-static/ для раздачи ЛЮБЫМ статическим хостингом:
-# без Node, без npm, без сборки на стороне пользователя.
+# Готовит каталог для раздачи ЛЮБЫМ статическим хостингом — без Node, без npm,
+# без сборки на стороне пользователя.
 #
-# Зачем нужна подготовка (три правки к dist/):
-#   1. app/index.html — чтобы URL /app отдавался статикой (как это делает сервер из репозитория);
-#   2. oauth2/callback и conf — файлы вместо серверных роутов: их запрашивает Service Worker
-#      при установке, а приложение — за списком провайдеров. Без них SW-установка падает и
-#      офлайна/установки PWA не будет;
-#   3. /app и /app/ добавляются в precache, а start_url манифеста переводится на /app/ —
-#      иначе офлайн-запуск установленного приложения не работает: статические серверы
-#      отдают на /app редирект 301 на /app/, а редирект-ответ Service Worker'ом для
-#      навигации не используется.
+# Что делает (правки к dist/):
+#   1. app/index.html — чтобы приложение отдавалось по URL <base>app/ статикой
+#      (как это делает сервер из репозитория);
+#   2. oauth2/callback и conf — файлы вместо серверных роутов: их запрашивает Service
+#      Worker при установке, а приложение — за списком провайдеров. Без них SW не
+#      установится, и не будет ни офлайна, ни установки PWA;
+#   3. в sw.js и манифесте пути переводятся на <base>, в precache добавляется <base>app/,
+#      а start_url манифеста — <base>app/ (иначе офлайн-запуск установленного приложения
+#      не работает: статические серверы отдают на <base>app редирект 301, а редирект-ответ
+#      Service Worker для навигации не использует).
+#
+# <base> — путь, по которому каталог будет доступен на хостинге:
+#   /                 корень домена (Netlify Drop, Cloudflare Pages, свой домен)
+#   /stackedit/       подкаталог (проектный GitHub Pages, /preview/name/)
+#   Сборка должна быть сделана с тем же base: STACKEDIT_BASE=/stackedit/ ./scripts/build-local.sh
 #
 # Использование:
-#   ./scripts/prepare-static.sh [каталог-назначения] [--tar]
+#   ./scripts/prepare-static.sh [каталог-назначения] [--base /путь/] [--tar]
 #     --tar — дополнительно собрать архивы для раздачи:
 #             stackedit-pwa-<версия>.tar.gz (Linux/macOS) и .zip (Windows, файлы в корне)
-#   python3 -m http.server 8080 --directory dist-static  # раздача (Python 3.7+)
-#   → http://localhost:8080/app/
+#   python3 -m http.server 8080 --directory dist-static    # локальная раздача при base=/
+#   → http://localhost:8080/
 
 set -euo pipefail
 
@@ -25,44 +31,129 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SRC="$ROOT/dist"
 ARGS=()
 MAKE_TAR=0
-for arg in "$@"; do
-  case "$arg" in
-    --tar) MAKE_TAR=1 ;;
-    *) ARGS+=("$arg") ;;
+BASE="/"
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --tar) MAKE_TAR=1; shift ;;
+    --base) BASE="${2:?--base требует значение}"; shift 2 ;;
+    *) ARGS+=("$1"); shift ;;
   esac
 done
 OUT="${ARGS[0]:-$ROOT/dist-static}"
+
+# Нормализуем base: ведущий и завершающий слэш обязательны
+case "$BASE" in /*) ;; *) BASE="/$BASE" ;; esac
+case "$BASE" in */) ;; *) BASE="$BASE/" ;; esac
 
 [ -f "$SRC/index.html" ] || {
   echo "Нет $SRC/index.html — сначала соберите проект (./scripts/build-local.sh)" >&2
   exit 1
 }
 
+# Проверяем, что сборка сделана под этот base
+if ! grep -qF "$BASE""static/" "$SRC/index.html"; then
+  echo "Сборка в $SRC сделана не под base=$BASE." >&2
+  echo "Пересоберите: STACKEDIT_BASE=$BASE ./scripts/build-local.sh" >&2
+  exit 1
+fi
+
 rm -rf "$OUT"
 mkdir -p "$OUT/app" "$OUT/oauth2"
 cp -R "$SRC/." "$OUT/"
 
-# 1. Приложение по /app (и /app/), как на сервере из репозитория
+# 1. Приложение по <base>app/ (и <base>app/), как на сервере из репозитория
 cp "$SRC/index.html" "$OUT/app/index.html"
+
+# 1a. .nojekyll — чтобы GitHub Pages (Jekyll) отдавал файлы как есть
+: > "$OUT/.nojekyll"
 
 # 2. Роуты, которые ожидает Service Worker и приложение
 cp "$ROOT/static/oauth2/callback.html" "$OUT/oauth2/callback"
 printf '{"allowSponsorship":false}\n' > "$OUT/conf"
 cp "$OUT/conf" "$OUT/app/conf"
 
-# 3. Правки sw.js и манифеста под раздачу статикой
-SW="$OUT/sw.js"
-[ -f "$SW" ] || { echo "Нет $SW — сборка неполная" >&2; exit 1; }
-sed -i.bak 's|"/app"|"/app/","/app"|' "$SW" && rm -f "$SW.bak"
+# 3. Пути в sw.js и манифесте под выбранный base
+[ -f "$OUT/sw.js" ] || { echo "Нет $OUT/sw.js — сборка неполная" >&2; exit 1; }
+python3 - "$OUT" "$BASE" <<'PYPATCH'
+import glob, json, os, re, sys
 
-MANIFEST="$(ls "$OUT"/manifest.*.json 2>/dev/null | head -1 || true)"
-[ -n "$MANIFEST" ] || { echo "Не найден manifest.*.json в $OUT" >&2; exit 1; }
-sed -i.bak 's|"start_url": *"app"|"start_url": "/app/"|' "$MANIFEST" && rm -f "$MANIFEST.bak"
+out, base = sys.argv[1], sys.argv[2]
 
-# 4. Пусковые файлы: чтобы не открывать index.html двойным кликом.
-#    Открытие файла напрямую (file://) ломает приложение: манифест и /sw.js не читаются,
-#    Chrome показывает «Файл манифеста отсутствует или недоступен для чтения».
-#    Корень раздачи обязан быть каталогом stackedit-pwa (там, где лежат app/, manifest, sw.js).
+
+def with_base(url):
+    """Абсолютный путь '/' -> '<base>'.
+
+    Сборка с STACKEDIT_BASE уже отдаёт пути с префиксом (webpack publicPath),
+    поэтому повторно не префиксуем — иначе получится /base/base/...
+    """
+    if not isinstance(url, str) or not url.startswith('/'):
+        return url
+    if base == '/' or url.startswith(base):
+        return url
+    return base + url.lstrip('/')
+
+
+def map_list(items):
+    return [with_base(u) for u in items] if isinstance(items, list) else items
+
+
+# --- Service Worker: precache-список, hashesMap, externals -------------------
+sw_path = os.path.join(out, 'sw.js')
+src = open(sw_path, encoding='utf-8').read()
+match = re.search(r'var __wpo = (\{.*?\});', src, re.S)
+if not match:
+    sys.exit('не найден __wpo в sw.js')
+data = json.loads(match.group(1))
+
+for key in ('main', 'additional', 'optional'):
+    if key in data.get('assets', {}):
+        data['assets'][key] = map_list(data['assets'][key])
+if isinstance(data.get('externals'), list):
+    data['externals'] = [
+        u for u in map_list(data['externals'])
+        # <base>app без слэша — редирект: ломает cache.addAll (см. ниже)
+        if u != base + 'app'
+    ]
+if isinstance(data.get('hashesMap'), dict):
+    data['hashesMap'] = {h: with_base(u) for h, u in data['hashesMap'].items()}
+
+# Обязательные записи в precache. Все — URL, которые отдаются напрямую (200),
+# без редиректов: cache.addAll в Service Worker падает на редиректе, и тогда
+# воркер не активируется (нет ни офлайна, ни установки приложения).
+# Именно поэтому здесь НЕТ '<base>app' без слэша — большинство серверов отдают
+# на него 301, а Location может потерять порт (nginx за туннелем), и precache ломается.
+main = data['assets'].setdefault('main', [])
+# webpack добавляет в precache <base>app без слэша (externals в webpack.prod.conf.js) —
+# убираем: такой URL отдаётся редиректом и рушит установку Service Worker.
+main[:] = [u for u in main if u != base + 'app']
+for extra in (base, base + 'app/', base + 'oauth2/callback'):
+    if extra not in main:
+        main.append(extra)
+
+open(sw_path, 'w', encoding='utf-8').write(
+    src[:match.start(1)] + json.dumps(data, separators=(',', ':')) + src[match.end(1):],
+)
+
+# --- Манифест: start_url, scope, иконки -------------------------------------
+manifests = glob.glob(os.path.join(out, 'manifest*.json'))
+if not manifests:
+    sys.exit('не найден manifest.*.json')
+manifest = manifests[0]
+md = json.load(open(manifest, encoding='utf-8'))
+# start_url — сам корень выкладки: он всегда отдаётся 200 (в отличие от '<base>app'
+# без слэша, где сервер отвечает 301, а редирект для запуска приложения ненадёжен).
+md['start_url'] = base
+if 'scope' in md:
+    md['scope'] = with_base(md['scope'])
+for icon in md.get('icons', []):
+    if 'src' in icon:
+        icon['src'] = with_base(icon['src'])
+json.dump(md, open(manifest, 'w', encoding='utf-8'), ensure_ascii=False, indent=2)
+print('start_url =', md['start_url'])
+PYPATCH
+
+# 4. Пусковые файлы для локальной раздачи — имеют смысл только при base=/
+if [ "$BASE" = "/" ]; then
 cat > "$OUT/start-windows.cmd" <<'BAT'
 @echo off
 chcp 65001 >nul
@@ -158,79 +249,69 @@ SH
 chmod +x "$OUT/start.sh"
 # cmd.exe надёжнее работает с CRLF — переводим переводы строк у .cmd
 sed -i 's/$/\r/' "$OUT/start-windows.cmd"
+fi
 
-cat > "$OUT/КАК-ЗАПУСТИТЬ.txt" <<'TXT'
+cat > "$OUT/КАК-ЗАПУСТИТЬ.txt" <<TXT
 STACKEDIT — ГОТОВОЕ ПРИЛОЖЕНИЕ (PWA)
 
 ЭТО НЕ РАСШИРЕНИЕ CHROME.
   Не загружайте эту папку через chrome://extensions ("Загрузить распакованное
   расширение"): Chrome ответит "Файл манифеста отсутствует или недоступен для
   чтения" / "Не удалось загрузить манифест" — там нужен manifest.json расширения,
-  а не манифест PWA. Установка делается иначе: запустите сервер (ниже) и выберите
-  в меню Chrome "Установить приложение".
+  а не манифест PWA. Установка делается иначе: откройте приложение по адресу
+  и выберите в меню Chrome "Установить приложение".
 
-ДВЕ ГЛАВНЫЕ ОШИБКИ ПРИ ЗАПУСКЕ
-  1. Открыть app\index.html двойным кликом. Так нельзя: браузер не может прочитать
-     манифест и Service Worker. Нужен локальный сервер (см. ниже).
-  2. Запустить сервер в папке НА УРОВЕНЬ ВЫШЕ. Если после распаковки получилось
-     stackedit-pwa-5.15.4\stackedit-pwa\..., то сервер надо запускать в папке
-     stackedit-pwa (в ней лежат app\, sw.js, manifest...json), а не в
-     stackedit-pwa-5.15.4. start-windows.cmd и start.sh находят её сами.
+ПОЧЕМУ НЕЛЬЗЯ ПРОСТО ОТКРЫТЬ ФАЙЛ
+  По file:// браузер не даёт ни манифест, ни Service Worker: Chrome проверяет
+  установку и сообщает not-from-secure-origin + no-manifest. Нужен адрес
+  https://... либо http://localhost. Отсюда два пути:
+    A) свой хостинг (ATS: файлы этой папки — на хост, приложение откроется
+       по https://ваш-адрес${BASE}), установка из меню Chrome;
+    B) локальный сервер (start-windows.cmd / start.sh) — только при base=/.
 
-WINDOWS
-  1. Двойной клик по start-windows.cmd в этой папке. Скрипт сам находит нужную папку
-     (даже если она вложена), запускает сервер и открывает браузер.
-     Нужен Python 3 (python.org/downloads, галочка "Add python.exe to PATH").
-  2. Откроется http://localhost:8080/  (адрес /app/ — то же приложение).
-  3. Значок "Установить" в адресной строке Chrome (или меню > Сохранить и поделиться
-     > Установить приложение). Дальше приложение запускается с рабочего стола и
-     работает без интернета.
-  Окно cmd закрывать нельзя, пока работаете. Ctrl+C — остановить.
-
-LINUX / MACOS
-  ./start.sh   (или вручную: python3 -m http.server 8080, затем http://localhost:8080/)
-
-ПРОВЕРКА, ЧТО СЕРВЕР ЗАПУЩЕН В ПРАВИЛЬНОЙ ПАПКЕ
-  Откройте http://localhost:8080/manifest.c9128ce574e7548a3b0d3bcd8bfa212c.json
-  Должен быть JSON. Если "404 Not Found" — сервер запущен не в той папке.
+БАЗОВЫЙ ПУТЬ (BASE)
+  Эти файлы собраны для base=${BASE}. То есть на хостинге они должны лежать так,
+  чтобы приложение открывалось по https://ваш-адрес${BASE}
+  (для base=/ — в корне сайта).
 
 ТЕЛЕФОН
-  Поставить PWA можно только по HTTPS. Загрузите содержимое этой папки
-  (не саму папку, а файлы внутри) на любой бесплатный статический хостинг:
-  Netlify Drop (app.netlify.com/drop) — перетащить папку, или Cloudflare Pages,
-  или GitHub Pages. Затем откройте выданный адрес https://... на телефоне:
+  Поставить PWA можно только по HTTPS. Откройте https://ваш-адрес${BASE} на телефоне:
   Chrome (Android) — меню > "Установить приложение";
   Safari (iOS) — "Поделиться" > "На экран Домой".
 
-Если адрес открывается, но установки нет — проверьте, что
-  https://ваш-адрес/            открывается (приложение)
-  https://ваш-адрес/conf        отдаёт {"allowSponsorship":false}
-  https://ваш-адрес/sw.js       отдаёт код
-Если /conf или /sw.js дают 404 — файлы загружены не на тот уровень (корень
-должен содержать app/, manifest..., sw.js, а не папку app целиком).
+ПРОВЕРКА РАЗДАЧИ
+  Должны открываться (200), иначе установки не будет:
+    https://ваш-адрес${BASE}                        — приложение
+    https://ваш-адрес${BASE}conf                    — {"allowSponsorship":false}
+    https://ваш-адрес${BASE}sw.js                   — код Service Worker
+    https://ваш-адрес${BASE}manifest.c9128ce574e7548a3b0d3bcd8bfa212c.json
 
 Подробная документация: README.ru.md и docs/ru/quickstart.md в репозитории.
 TXT
 
-echo "Готово: $OUT ($(du -sh "$OUT" | cut -f1))"
-
-echo "Раздача:  Windows — двойной клик по start-windows.cmd"
-echo "          Linux/macOS — ./start.sh   (или python3 -m http.server 8080)"
-echo "Открыть:  http://localhost:8080/app/   (Далее: Chrome → «Установить приложение»)"
-echo "Телефон:  нужен HTTPS — положите содержимое каталога на любой статический хостинг"
-echo "          (Netlify Drop, Cloudflare Pages, GitHub Pages) и откройте его на телефоне."
+echo "Готово: $OUT ($(du -sh "$OUT" | cut -f1)), base=$BASE"
+echo "Проверка установки:  node scripts/check-installability.mjs $OUT --base $BASE"
+if [ "$BASE" = "/" ]; then
+  echo "Локально:  Windows — двойной клик по start-windows.cmd; Linux/macOS — ./start.sh"
+  echo "Открыть:   http://localhost:8080/   (Далее: Chrome → «Установить приложение»)"
+else
+  echo "Хостинг:   положите СОДЕРЖИМОЕ каталога так, чтобы приложение было на ${BASE}"
+  echo "Установка: откройте https://ваш-адрес${BASE} → Chrome → «Установить приложение»"
+fi
 
 if [ "$MAKE_TAR" -eq 1 ]; then
   VERSION="$(sed -n 's/.*"version": *"\([^"]*\)".*/\1/p' "$ROOT/package.json" | head -1)"
+  SUFFIX=""
+  [ "$BASE" != "/" ] && SUFFIX="-base$(printf '%s' "$BASE" | tr -c 'a-zA-Z0-9' '-')"
   STAGE="$(mktemp -d)"
   trap 'rm -rf "$STAGE"' EXIT
   cp -R "$OUT" "$STAGE/stackedit-pwa"
-  TARBALL="$ROOT/stackedit-pwa-$VERSION.tar.gz"
+  TARBALL="$ROOT/stackedit-pwa-$VERSION$SUFFIX.tar.gz"
   tar -czf "$TARBALL" -C "$STAGE" stackedit-pwa
 
   # ZIP — для Windows: файлы лежат прямо в корне архива, без лишней вложенной папки.
   # "Извлечь всё" в Проводнике создаёт одну папку, и она уже правильный корень раздачи.
-  ZIPFILE="$ROOT/stackedit-pwa-$VERSION.zip"
+  ZIPFILE="$ROOT/stackedit-pwa-$VERSION$SUFFIX.zip"
   rm -f "$ZIPFILE"
   python3 - "$OUT" "$ZIPFILE" <<'PYZIP'
 import os, sys, zipfile

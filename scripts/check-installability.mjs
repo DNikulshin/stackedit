@@ -16,11 +16,14 @@
 //   node scripts/check-installability.mjs dist-static          # каталог: поднимет свой сервер
 //   node scripts/check-installability.mjs http://localhost:8080/
 //   node scripts/check-installability.mjs dist-static --as-extension   # что скажет chrome://extensions
+//   node scripts/check-installability.mjs dist-static --base /stackedit/   # сборка для подкаталога
 //
 // Требования: Node.js ≥ 22 (встроенный WebSocket), Chrome/Chromium, python3 (для каталога).
 
 import { spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
+import { mkdir, mkdtemp, symlink } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { createServer } from 'node:net';
 import path from 'node:path';
 import process from 'node:process';
@@ -44,7 +47,15 @@ if (!chromePath) {
 
 const args = process.argv.slice(2);
 const asExtension = args.includes('--as-extension');
-const target = args.find((a) => !a.startsWith('--'));
+const baseIndex = args.indexOf('--base');
+let base = baseIndex >= 0 ? args[baseIndex + 1] : '/';
+if (!base) {
+  console.error('--base требует значение, например --base /stackedit/');
+  process.exit(2);
+}
+if (!base.startsWith('/')) base = `/${base}`;
+if (!base.endsWith('/')) base = `${base}/`;
+const target = args.find((a, i) => !a.startsWith('--') && !(baseIndex >= 0 && i === baseIndex + 1));
 if (!target) {
   console.error('Укажите каталог сборки или URL.');
   process.exit(2);
@@ -113,6 +124,7 @@ function rpc(ws, method, params = {}, sessionId) {
 let server;
 let chrome;
 let failed = false;
+let stageRoot;   // временный корень раздачи, если каталог отдаётся из-под <base>
 
 try {
   // --- chrome://extensions: загрузка каталога как распакованного расширения ---
@@ -134,14 +146,23 @@ try {
     // --- установка как приложение (PWA) ---
     let url = target;
     let dir;
-    if (!/^https?:\/\//.test(target)) {
+    if (!/^[a-z][a-z0-9+.-]*:\/\//i.test(target)) {
       dir = path.resolve(target);
       const port = await freePort();
-      server = spawn('python3', ['-m', 'http.server', String(port), '--directory', dir], {
+      let serveRoot = dir;
+      if (base !== '/') {
+        // Каталог должен быть доступен по base: раздаём временный корень с симлинком
+        stageRoot = await mkdtemp(path.join(tmpdir(), 'cdp-serve-'));
+        const link = path.join(stageRoot, base.replace(/\/$/, ''));
+        await mkdir(path.dirname(link), { recursive: true });
+        await symlink(dir, link);
+        serveRoot = stageRoot;
+      }
+      server = spawn('python3', ['-m', 'http.server', String(port), '--directory', serveRoot], {
         stdio: 'ignore',
       });
       await sleep(1200);
-      url = `http://localhost:${port}/`;
+      url = `http://localhost:${port}${base}`;
       console.log(`Каталог: ${dir}  →  ${url}`);
     }
 
@@ -179,6 +200,10 @@ try {
 } finally {
   if (chrome) chrome.child.kill('SIGKILL');
   if (server) server.kill('SIGKILL');
+  if (stageRoot) {
+    const { rm } = await import('node:fs/promises');
+    await rm(stageRoot, { recursive: true, force: true }).catch(() => {});
+  }
 }
 
 process.exit(failed ? 1 : 0);
