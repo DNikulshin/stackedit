@@ -1,0 +1,92 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Сборка приложения из исходников (Node 14 в .toolchain) + артефакт dist
+  dist:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Сборка (scripts/build-local.sh)
+        run: ./scripts/build-local.sh
+
+      - name: Проверка артефактов сборки
+        run: |
+          set -eux
+          test -f dist/index.html
+          test -f dist/sw.js
+          ls dist/manifest.*.json
+          ls dist/static/js/app.*.js
+          du -sh dist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: stackedit-dist
+          path: dist
+          retention-days: 14
+
+  # Сборка Docker-образа и smoke-тест контейнера
+  docker:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Сборка образа
+        run: docker build -f docker/Dockerfile -t stackedit-ci .
+
+      - name: Smoke-тест контейнера
+        run: |
+          set -eux
+          docker run -d --name stackedit-ci -p 8080:8080 stackedit-ci
+
+          # ждём, пока сервер ответит
+          for i in $(seq 1 30); do
+            if curl -fsS http://localhost:8080/conf > /dev/null; then break; fi
+            sleep 2
+          done
+
+          curl -fsS http://localhost:8080/conf
+          curl -fsS -o /dev/null http://localhost:8080/app
+          curl -fsS -o /dev/null http://localhost:8080/sw.js
+
+          # имя манифеста содержит хэш — берём его со страницы приложения
+          manifest=$(curl -fsS http://localhost:8080/app | grep -o '/manifest[^"]*\.json' | head -1)
+          test -n "$manifest"
+          curl -fsS -o /dev/null "http://localhost:8080$manifest"
+
+          # версия Node внутри образа и состояние HEALTHCHECK
+          docker exec stackedit-ci node -v | grep -q '^v14\.'
+          for i in $(seq 1 15); do
+            status=$(docker inspect --format '{{.State.Health.Status}}' stackedit-ci)
+            [ "$status" = healthy ] && break
+            sleep 4
+          done
+          test "$status" = healthy
+
+      - name: Логи контейнера
+        if: always()
+        run: docker logs stackedit-ci || true
+
+      - name: Публикация образа в GHCR
+        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+        run: |
+          set -eux
+          image="ghcr.io/${GITHUB_REPOSITORY,,}"
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+          docker tag stackedit-ci "$image:latest"
+          docker tag stackedit-ci "$image:${GITHUB_SHA::7}"
+          docker push "$image:latest"
+          docker push "$image:${GITHUB_SHA::7}"
