@@ -11,8 +11,9 @@
         </select>
       </form-entry>
       <div class="modal__info modal__info--multiline">
-        Files, folders and their content are recreated in <b>{{currentWorkspaceName}}</b>.
-        File IDs and sync locations are not restored.
+        Files, folders and their content are recreated in <b>{{currentWorkspaceName}}</b>,
+        including the cursor position and the scroll offset of each file.
+        File IDs, synchronization history and sync locations are not restored.
       </div>
       <div class="modal__error" v-if="error">{{error}}</div>
     </div>
