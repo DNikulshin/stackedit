@@ -68,11 +68,11 @@ Chrome на такой странице сообщает `not-from-secure-origin
 ```bash
 # Linux / macOS: tar.gz, разворачивается в каталог stackedit-pwa/
 curl -fL -o stackedit-pwa.tar.gz \
-  https://github.com/DNikulshin/stackedit/releases/download/v5.15.4-ru.3/stackedit-pwa-5.15.4.tar.gz
+  https://github.com/DNikulshin/stackedit/releases/latest/download/stackedit-pwa-5.15.4.tar.gz
 tar xzf stackedit-pwa.tar.gz
 
 # Windows: zip, файлы лежат прямо в корне архива (без лишней вложенной папки)
-# https://github.com/DNikulshin/stackedit/releases/download/v5.15.4-ru.3/stackedit-pwa-5.15.4.zip
+# https://github.com/DNikulshin/stackedit/releases/latest/download/stackedit-pwa-5.15.4.zip
 ```
 
 > Windows: распакуйте zip («Извлечь всё») и запускайте `start-windows.cmd` из получившейся папки.
