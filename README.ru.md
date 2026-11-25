@@ -14,6 +14,7 @@
 
 | Документ | О чём |
 | --- | --- |
+| [docs/ru/quickstart.md](docs/ru/quickstart.md) | **Готовое приложение на ПК и телефон без сборки и зависимостей** |
 | [docs/ru/build.md](docs/ru/build.md) | Сборка из исходников: требования, все известные засады, проверка результата |
 | [docs/ru/pc.md](docs/ru/pc.md) | Установка на ПК: локальный сервер, автозапуск, установка как приложение, офлайн |
 | [docs/ru/phone.md](docs/ru/phone.md) | Телефон без магазина: PWA в Android/iOS, варианты с HTTPS, что не работает |
@@ -21,6 +22,30 @@
 | [docs/ru/faq.md](docs/ru/faq.md) | Ошибки сборки и запуска и что с ними делать |
 
 ## Быстрый старт
+
+**Без сборки и без зависимостей** (ни Node, ни npm, ни компиляторов):
+
+```bash
+# 1) готовые файлы из релиза
+curl -fL -o stackedit-pwa.tar.gz \
+  https://github.com/DNikulshin/stackedit/releases/download/v5.15.4-ru.1/stackedit-pwa-5.15.4.tar.gz
+tar xzf stackedit-pwa.tar.gz
+
+# 2) раздать локально и открыть в браузере
+cd stackedit-pwa && python3 -m http.server 8080
+# → http://localhost:8080/app/  → Chrome: «Установить приложение»
+```
+
+Или вообще одной командой, если есть Docker:
+
+```bash
+docker run -d --name stackedit -p 8080:8080 ghcr.io/dnikulshin/stackedit:latest
+# → http://localhost:8080/app
+```
+
+Подробно — [docs/ru/quickstart.md](docs/ru/quickstart.md) (ПК и телефон, без сборки).
+
+## Сборка из исходников
 
 ```bash
 git clone https://github.com/DNikulshin/stackedit.git
@@ -31,8 +56,8 @@ cd stackedit
 .toolchain/node-v14.21.3-linux-x64/bin/node .   # http://localhost:8080/app
 ```
 
-Открыть <http://localhost:8080/app>. Дальше: установить как приложение (см. [docs/ru/pc.md](docs/ru/pc.md))
-или поднять на сервере и поставить на телефон (см. [docs/ru/phone.md](docs/ru/phone.md)).
+Дальше: установить как приложение (см. [docs/ru/pc.md](docs/ru/pc.md)) или поднять на сервере
+и поставить на телефон (см. [docs/ru/phone.md](docs/ru/phone.md)).
 
 ## Что работает в самостоятельной сборке, а что нет
 
@@ -66,8 +91,10 @@ cd stackedit
 1. `package-lock.json`: git-зависимость `midi` (нужна `abcjs` для нотных записей) указывала на удалённый
    репозиторий `paulrosen/MIDI.js`. URL переставлен на исходный `mudcube/MIDI.js`, тот же коммит
    `e593ffef` — содержимое зависимости не изменилось.
-2. Добавлены `scripts/build-local.sh`, `docker/Dockerfile` (самодостаточный образ; проверено сборкой и запуском)
-   и `docs/ru/*` — сборка одной командой и эта документация.
+2. Добавлены `scripts/build-local.sh`, `scripts/prepare-static.sh`, `scripts/check-static.sh`,
+   `.github/workflows/ci.yml` (сборка + docker smoke-тест), `docker/Dockerfile` (самодостаточный образ;
+   проверено сборкой и запуском) и `docs/ru/*` — сборка одной командой, готовый PWA без сборки и эта
+   документация.
 
 Сам код приложения не менялся.
 

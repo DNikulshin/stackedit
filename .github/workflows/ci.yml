@@ -14,6 +14,8 @@ jobs:
   # Сборка приложения из исходников (Node 14 в .toolchain) + артефакт dist
   dist:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
 
@@ -29,11 +31,35 @@ jobs:
           ls dist/static/js/app.*.js
           du -sh dist
 
+      - name: Готовый статический каталог (без Node)
+        run: ./scripts/prepare-static.sh dist-static --tar
+
+      - name: Проверка статического каталога
+        run: ./scripts/check-static.sh dist-static
+
       - uses: actions/upload-artifact@v4
         with:
           name: stackedit-dist
           path: dist
           retention-days: 14
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: stackedit-pwa-static
+          path: stackedit-pwa-*.tar.gz
+          retention-days: 14
+
+      - name: Релиз с готовым архивом (только по тегу)
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -eux
+          tag="${GITHUB_REF#refs/tags/}"
+          gh release create "$tag" stackedit-pwa-*.tar.gz \
+            --title "StackEdit $tag (сборка из исходников + готовый PWA)" \
+            --notes "Готовый архив dist-static: распакуйте и раздайте любым статическим сервером (см. docs/ru/quickstart.md). Собран скриптом scripts/build-local.sh на Node 14." \
+            || gh release upload "$tag" stackedit-pwa-*.tar.gz --clobber
 
   # Сборка Docker-образа и smoke-тест контейнера
   docker:

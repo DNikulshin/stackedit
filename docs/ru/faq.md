@@ -72,6 +72,11 @@ npm config set registry https://registry.npmmirror.com
 
 ## PWA и офлайн
 
+**Статика: нет офлайна и не предлагается установка** — Service Worker не устанавливается, если при
+установке не отдаются 200 URL `/app/` и `/oauth2/callback` (они в precache-списке). Готовый каталог
+и проверку см. в [quickstart.md](quickstart.md); если готовили вручную:
+`./scripts/prepare-static.sh && ./scripts/check-static.sh`.
+
 **Нет кнопки «Установить приложение»** — только `https://` или `http://localhost`. По
 `http://192.168.x.x` установка недоступна (см. [phone.md](phone.md), способ 2).
 
