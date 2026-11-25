@@ -6,6 +6,9 @@
 
 https://stackedit.io/
 
+> 🇷🇺 Русская документация: сборка из исходников, установка на ПК и телефон без магазина приложений —
+> [README.ru.md](README.ru.md).
+
 ### Ecosystem
 
 - [Chrome app](https://chrome.google.com/webstore/detail/iiooodelglhkcpgbajoejffhijaclcdg)
