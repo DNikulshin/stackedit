@@ -14,3 +14,7 @@ dist-static/
 *.zip
 dist-pages/
 dist-preview/
+
+# Прототип SQLite+OPFS: сторонние vendor-артефакты
+prototype/sqlite-opfs/public/vendor/
+prototype/sqlite-opfs/.vendor-tmp/
