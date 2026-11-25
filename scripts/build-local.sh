@@ -101,6 +101,13 @@ log "gulp build-prism"
 npx gulp build-prism
 
 # 4. Продакшн-сборка (webpack + отдельный проход по стилям).
+# 4. Чистая сборка.
+#    Старые файлы в dist/ мешают: prepare-static.sh копирует каталог целиком, и в выкладку
+#    попадают манифест и каталог иконок от сборки с другим base (наблюдалось: index.html
+#    с base=/, манифест от сборки под /preview/ → 404 на иконки в браузере).
+log "Очищаю dist/"
+rm -rf "$ROOT/dist"
+
 log "npm run build (STACKEDIT_BASE=$BASE)"
 STACKEDIT_BASE="$BASE" npm run build
 

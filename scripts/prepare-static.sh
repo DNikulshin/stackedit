@@ -136,10 +136,39 @@ open(sw_path, 'w', encoding='utf-8').write(
 )
 
 # --- Манифест: start_url, scope, иконки -------------------------------------
-manifests = glob.glob(os.path.join(out, 'manifest*.json'))
-if not manifests:
-    sys.exit('не найден manifest.*.json')
-manifest = manifests[0]
+# Манифест берём ровно тот, на который ссылается index.html, а не первый попавшийся:
+# если в каталоге остались манифесты прошлых сборок, выбор «первого» молча подменял
+# start_url и иконки (в браузере — 404 на иконки и чужой scope).
+def linked_manifest():
+    html_path = os.path.join(out, 'index.html')
+    if not os.path.isfile(html_path):
+        return None
+    html = open(html_path, encoding='utf-8').read()
+    tag = re.search(r'<link[^>]+rel=["\']?manifest["\']?[^>]*>', html, re.I)
+    if not tag:
+        return None
+    href = re.search(r'href=["\']?([^"\'\s>]+)', tag.group(0))
+    if not href:
+        return None
+    url = href.group(1).split('?')[0].split('#')[0]
+    if base != '/' and url.startswith(base):
+        url = url[len(base):]
+    else:
+        url = url.lstrip('/')
+    candidate = os.path.join(out, url)
+    return candidate if os.path.isfile(candidate) else None
+
+
+manifest = linked_manifest()
+if manifest is None:
+    manifests = glob.glob(os.path.join(out, 'manifest*.json'))
+    if len(manifests) != 1:
+        sys.exit(
+            'index.html не ссылается на существующий манифест, а манифестов в каталоге %d — '
+            'похоже на остатки прошлой сборки. Пересоберите: '
+            './scripts/build-local.sh --base %s' % (len(manifests), base)
+        )
+    manifest = manifests[0]
 md = json.load(open(manifest, encoding='utf-8'))
 # start_url — сам корень выкладки: он всегда отдаётся 200 (в отличие от '<base>app'
 # без слэша, где сервер отвечает 301, а редирект для запуска приложения ненадёжен).
