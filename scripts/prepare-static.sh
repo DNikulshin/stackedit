@@ -111,20 +111,21 @@ for key in ('main', 'additional', 'optional'):
 if isinstance(data.get('externals'), list):
     data['externals'] = [
         u for u in map_list(data['externals'])
-        # <base>app без слэша — редирект: ломает cache.addAll (см. ниже)
+        # <base>app без слэша — редирект: плохой precache-URL (см. ниже)
         if u != base + 'app'
     ]
 if isinstance(data.get('hashesMap'), dict):
     data['hashesMap'] = {h: with_base(u) for h, u in data['hashesMap'].items()}
 
-# Обязательные записи в precache. Все — URL, которые отдаются напрямую (200),
-# без редиректов: cache.addAll в Service Worker падает на редиректе, и тогда
-# воркер не активируется (нет ни офлайна, ни установки приложения).
-# Именно поэтому здесь НЕТ '<base>app' без слэша — большинство серверов отдают
-# на него 301, а Location может потерять порт (nginx за туннелем), и precache ломается.
+# Обязательные записи в precache. Все — URL, которые отдаются напрямую (200), без редиректов.
+# Редирект в precache ломается двумя способами: (1) если Location уводит на другой хост/порт
+# (nginx за туннелем теряет порт), fetch внутри cache.addAll даёт сетевую ошибку и отклоняется вся
+# пачка — воркер не активируется; (2) даже закэшированный ответ, пришедший через редирект, браузер
+# не отдаёт на навигацию, то есть офлайн-старт приложения не работает.
+# Поэтому здесь НЕТ '<base>app' без слэша — большинство серверов отдают на него 301.
 main = data['assets'].setdefault('main', [])
 # webpack добавляет в precache <base>app без слэша (externals в webpack.prod.conf.js) —
-# убираем: такой URL отдаётся редиректом и рушит установку Service Worker.
+# убираем: такой URL отдаётся редиректом, а redirect-ответ не годится для офлайн-старта.
 main[:] = [u for u in main if u != base + 'app']
 for extra in (base, base + 'app/', base + 'oauth2/callback'):
     if extra not in main:

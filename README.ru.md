@@ -20,6 +20,7 @@
 | [docs/ru/phone.md](docs/ru/phone.md) | Телефон без магазина: PWA в Android/iOS, варианты с HTTPS, что не работает |
 | [docs/ru/self-host.md](docs/ru/self-host.md) | Свой сервер: VPS + Caddy + systemd, GitHub OAuth, статический хостинг, Docker |
 | [docs/ru/faq.md](docs/ru/faq.md) | Ошибки сборки и запуска и что с ними делать |
+| [docs/ru/chrome-as-server.md](docs/ru/chrome-as-server.md) | Браузер как сервер и локальная СУБД: что реально работает в 2026 и что из этого применимо здесь |
 
 ## Быстрый старт
 
