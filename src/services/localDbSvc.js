@@ -3,6 +3,7 @@ import store from '../store';
 import welcomeFile from '../data/welcomeFile.md';
 import workspaceSvc from './workspaceSvc';
 import constants from '../data/constants';
+import storageSvc from './storageSvc';
 
 const deleteMarkerMaxAge = 1000;
 const dbVersion = 1;
@@ -340,6 +341,9 @@ const localDbSvc = {
 
     // Create the connection
     this.connection = new Connection();
+
+    // Ask for a persistent storage in the background (may be evicted otherwise)
+    storageSvc.autoRequestPersist();
 
     // Load the DB
     await localDbSvc.sync();

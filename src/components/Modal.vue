@@ -37,6 +37,7 @@ import SyncManagementModal from './modals/SyncManagementModal';
 import PublishManagementModal from './modals/PublishManagementModal';
 import WorkspaceManagementModal from './modals/WorkspaceManagementModal';
 import AccountManagementModal from './modals/AccountManagementModal';
+import RestoreBackupModal from './modals/RestoreBackupModal';
 import BadgeManagementModal from './modals/BadgeManagementModal';
 import SponsorModal from './modals/SponsorModal';
 
@@ -89,6 +90,7 @@ export default {
     PublishManagementModal,
     WorkspaceManagementModal,
     AccountManagementModal,
+    RestoreBackupModal,
     BadgeManagementModal,
     SponsorModal,
     // Providers
