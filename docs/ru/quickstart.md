@@ -12,13 +12,22 @@
 
 ## Шаг 1. Возьмите готовые файлы — один из двух способов
 
-**A. Архив из релиза** (~9 МБ, разворачивается в `stackedit-pwa/`):
+**A. Архив из релиза** (~9 МБ) — два формата, берите свой:
 
 ```bash
+# Linux / macOS: tar.gz, разворачивается в каталог stackedit-pwa/
 curl -fL -o stackedit-pwa.tar.gz \
-  https://github.com/DNikulshin/stackedit/releases/download/v5.15.4-ru.1/stackedit-pwa-5.15.4.tar.gz
-tar xzf stackedit-pwa.tar.gz        # → каталог stackedit-pwa/
+  https://github.com/DNikulshin/stackedit/releases/download/v5.15.4-ru.3/stackedit-pwa-5.15.4.tar.gz
+tar xzf stackedit-pwa.tar.gz
+
+# Windows: zip, файлы лежат прямо в корне архива (без лишней вложенной папки)
+# https://github.com/DNikulshin/stackedit/releases/download/v5.15.4-ru.3/stackedit-pwa-5.15.4.zip
 ```
+
+> Windows: распакуйте zip («Извлечь всё») и запускайте `start-windows.cmd` из получившейся папки.
+> Там же лежат `app\`, `sw.js`, `manifest….json` — это и есть корень раздачи. Если инструмент
+> распаковки создал лишний уровень вложенности (`…\stackedit-pwa-5.15.4\stackedit-pwa\`), скрипт
+> найдёт правильную папку сам — вручную ничего перекладывать не нужно.
 
 **B. Docker** — файлы вообще не нужны, образ уже собран в CI:
 
@@ -36,7 +45,7 @@ docker run -d --name stackedit -p 8080:8080 ghcr.io/dnikulshin/stackedit:latest
 | --- | --- | --- |
 | Docker (вариант B) | Docker | <http://localhost:8080/app> |
 | Python (вариант A) | Python 3 (есть в Linux/macOS, в Windows — с python.org или из Store) | <http://localhost:8080/app/> |
-| Готовые скрипты запуска | `start-windows.cmd` / `start.sh` в архиве | <http://localhost:8080/app/> |
+| Готовые скрипты запуска | `start-windows.cmd` / `start.sh` в архиве | <http://localhost:8080/> |
 
 Вариант B — если запускали `docker run`, дальше сразу к установке.
 
@@ -51,17 +60,24 @@ cd stackedit-pwa
 python3 -m http.server 8080        # Windows: py -m http.server 8080
 ```
 
-Откройте <http://localhost:8080/app/>. Мгновенная проверка, что раздача верная:
-
-> ⚠️ **Не открывайте `stackedit-pwa\app\index.html` двойным кликом и не делайте корнем раздачи
-> папку `app`.** Тогда манифест и `/sw.js` не находятся, и Chrome пишет «Файл манифеста
-> отсутствует или недоступен для чтения. Не удалось загрузить манифест». Корень раздачи —
-> папка `stackedit-pwa` целиком (в ней лежат `app/`, `manifest...json`, `sw.js`).
-> Подробнее — [faq.md](faq.md#файл-манифеста-отсутствует-или-недоступен-для-чтения).
+Откройте <http://localhost:8080/> (адрес `/app/` — то же приложение; он же `start_url` манифеста).
+Мгновенная проверка, что раздача верная:
 
 ```bash
 curl -s http://localhost:8080/conf          # → {"allowSponsorship":false}
 ```
+
+> ⚠️ **Три способа сломать запуск** (все дают «Файл манифеста отсутствует или недоступен для чтения»):
+>
+> 1. Открыть `app\index.html` двойным кликом — по `file://` манифест и Service Worker не читаются.
+> 2. Сделать корнем раздачи папку `app` — манифест и `/sw.js` лежат уровнем выше, будет 404.
+> 3. Запустить сервер в папке **на уровень выше** — например в `…\stackedit-pwa-5.15.4`, когда файлы
+>    лежат в `…\stackedit-pwa-5.15.4\stackedit-pwa`. Тогда `/` покажет список файлов, а манифест
+>    будет 404.
+>
+> Корень раздачи — папка, где лежат `sw.js`, `manifest….json` и `app\`. Проверка: адрес
+> `http://localhost:8080/manifest.c9128ce574e7548a3b0d3bcd8bfa212c.json` должен отдать JSON.
+> Подробнее — [faq.md](faq.md#файл-манифеста-отсутствует-или-недоступен-для-чтения).
 
 ### Установка как приложение
 

@@ -82,6 +82,10 @@ npm config set registry https://registry.npmmirror.com
 2. **Корнем раздачи выбрана папка `app`** — `index.html` ссылается на манифест абсолютным путём
    `/manifest.<hash>.json`, а он лежит на уровень выше. При корне `app/` этот адрес даёт 404
    (вместе с `/static/js/...` и `/sw.js`).
+3. **Сервер запущен в папке на уровень выше.** Типичный случай: распаковщик создал
+   `…\stackedit-pwa-5.15.4\stackedit-pwa\…`, и `py -m http.server` запущен в `…\stackedit-pwa-5.15.4`.
+   Тогда `/` отдаёт список файлов, а `manifest….json` — 404. Запускайте сервер в папке, где лежат
+   `sw.js`, `manifest….json` и `app\`; `start-windows.cmd` / `start.sh` из архива находят её сами.
 
 Правильно: корень раздачи — папка `stackedit-pwa` целиком, адрес — `http://localhost:8080/app/`.
 
@@ -94,7 +98,7 @@ py -m http.server 8080
 Проверка, что корень верный (все три адреса должны дать 200):
 
 ```bash
-curl -s -o /dev/null -w '%{http_code}\n' http://localhost:8080/app/
+curl -s -o /dev/null -w '%{http_code}\n' http://localhost:8080/
 curl -s -o /dev/null -w '%{http_code}\n' http://localhost:8080/manifest.c9128ce574e7548a3b0d3bcd8bfa212c.json
 curl -s -o /dev/null -w '%{http_code}\n' http://localhost:8080/sw.js
 ```

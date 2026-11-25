@@ -47,7 +47,9 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: stackedit-pwa-static
-          path: stackedit-pwa-*.tar.gz
+          path: |
+            stackedit-pwa-*.tar.gz
+            stackedit-pwa-*.zip
           retention-days: 14
 
       - name: Релиз с готовым архивом (только по тегу)
@@ -57,10 +59,10 @@ jobs:
         run: |
           set -eux
           tag="${GITHUB_REF#refs/tags/}"
-          gh release create "$tag" stackedit-pwa-*.tar.gz \
+          gh release create "$tag" stackedit-pwa-*.tar.gz stackedit-pwa-*.zip \
             --title "StackEdit $tag (сборка из исходников + готовый PWA)" \
             --notes "Готовый архив dist-static: распакуйте и раздайте любым статическим сервером (см. docs/ru/quickstart.md). Собран скриптом scripts/build-local.sh на Node 14." \
-            || gh release upload "$tag" stackedit-pwa-*.tar.gz --clobber
+            || gh release upload "$tag" stackedit-pwa-*.tar.gz stackedit-pwa-*.zip --clobber
 
   # Сборка Docker-образа и smoke-тест контейнера
   docker:
