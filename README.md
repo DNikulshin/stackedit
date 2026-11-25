@@ -18,8 +18,8 @@ StackEdit нет и никогда не было — «установка» зд
 
 Приложение умеет: таблицы, списки задач, сноски, формулы (KaTeX), диаграммы (Mermaid), нотные записи
 (ABC), подсветку кода, экспорт в Markdown/HTML по шаблонам Handlebars, несколько рабочих пространств,
-бэкап всех данных одним файлом, публикацию и синхронизацию с GitHub/GitLab/Gist/Google Drive/Dropbox/
-WordPress/Blogger/Zendesk/CouchDB (последние три требуют своих OAuth-ключей, см.
+бэкап всех данных одним файлом, публикацию и синхронизацию с GitHub/GitLab/Gist/Google Drive/Dropbox/WordPress/Blogger/Zendesk/CouchDB
+(любому из них в самостоятельной сборке нужны свои OAuth-ключи или токен — см.
 [docs/ru/self-host.md](docs/ru/self-host.md)).
 
 Не умеет (ограничения апстрима): экспорт в PDF и через Pandoc — обработчик на сервере требует платного
