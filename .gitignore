@@ -11,3 +11,4 @@ chrome-app/*.zip
 .toolchain/
 dist-static/
 *.tar.gz
+*.zip
