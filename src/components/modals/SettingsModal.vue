@@ -196,7 +196,9 @@ export default {
       if (!this.error) {
         const settings = this.strippedCustomSettings;
         await store.dispatch('data/setSettings', settings);
-        const customSettings = yaml.safeLoad(settings);
+        // safeLoad('') возвращает undefined: на пустых настройках (свежий профиль)
+        // обращение к свойству падало с TypeError и диалог не закрывался.
+        const customSettings = yaml.safeLoad(settings) || {};
         if (customSettings.shortcuts) {
           badgeSvc.addBadge('changeShortcuts');
         }
