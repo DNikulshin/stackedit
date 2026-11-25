@@ -36,10 +36,15 @@ docker run -d --name stackedit -p 8080:8080 ghcr.io/dnikulshin/stackedit:latest
 | --- | --- | --- |
 | Docker (вариант B) | Docker | <http://localhost:8080/app> |
 | Python (вариант A) | Python 3 (есть в Linux/macOS, в Windows — с python.org или из Store) | <http://localhost:8080/app/> |
+| Готовые скрипты запуска | `start-windows.cmd` / `start.sh` в архиве | <http://localhost:8080/app/> |
 
 Вариант B — если запускали `docker run`, дальше сразу к установке.
 
-Вариант A:
+Вариант A — Windows: двойной клик по **`start-windows.cmd`** в папке `stackedit-pwa`
+(нужен Python 3 с python.org, галочка «Add python.exe to PATH»). Скрипт сам поднимает сервер
+и открывает браузер. Linux/macOS — `./start.sh` из той же папки.
+
+Вручную то же самое:
 
 ```bash
 cd stackedit-pwa
@@ -47,6 +52,12 @@ python3 -m http.server 8080        # Windows: py -m http.server 8080
 ```
 
 Откройте <http://localhost:8080/app/>. Мгновенная проверка, что раздача верная:
+
+> ⚠️ **Не открывайте `stackedit-pwa\app\index.html` двойным кликом и не делайте корнем раздачи
+> папку `app`.** Тогда манифест и `/sw.js` не находятся, и Chrome пишет «Файл манифеста
+> отсутствует или недоступен для чтения. Не удалось загрузить манифест». Корень раздачи —
+> папка `stackedit-pwa` целиком (в ней лежат `app/`, `manifest...json`, `sw.js`).
+> Подробнее — [faq.md](faq.md#файл-манифеста-отсутствует-или-недоступен-для-чтения).
 
 ```bash
 curl -s http://localhost:8080/conf          # → {"allowSponsorship":false}
@@ -97,6 +108,10 @@ curl -s http://localhost:8080/conf          # → {"allowSponsorship":false}
 Если `/app/` или `/oauth2/callback` отдают 404 — Service Worker не установится: установка PWA
 и офлайн не заработают.
 
+Если 404 дают `/manifest...json` и `/sw.js` — корень раздачи выбран неверно (взята папка `app`
+вместо `stackedit-pwa`); именно в этом случае Chrome пишет «Файл манифеста отсутствует или
+недоступен для чтения».
+
 ## Что дальше
 
 - Офлайн и обновления, где лежат файлы, перенос между устройствами — [pc.md](pc.md).
@@ -114,7 +129,9 @@ curl -s http://localhost:8080/conf          # → {"allowSponsorship":false}
 - автоматическая проверка `./scripts/check-static.sh` — все URL из precache Service Worker возвращают
   200 (эта же проверка гоняется в CI при каждом пуше);
 - образ из GHCR: `docker pull` без авторизации, контейнер `healthy`, `/app`, `/conf`, `/sw.js` — 200;
-- на ПК установка PWA из Chrome с `http://localhost:8080/app` (манифест, SW, `beforeinstallprompt`).
+- на ПК установка PWA из Chrome с `http://localhost:8080/app` (манифест, SW, `beforeinstallprompt`);
+- `start.sh` из архива поднимает сервер и даёт те же 200 на `/app/`, `/conf`, `/sw.js`, `/manifest...json`.
+  `start-windows.cmd` собран по тому же принципу, но на Windows не запускался (в среде сборки нет Windows).
 
 Не проверялось (нет возможности в этой среде): конкретные хостинги Netlify Drop / Cloudflare Pages /
 GitHub Pages, Termux на Android, установка с реального домена по HTTPS — поведение обычной статики

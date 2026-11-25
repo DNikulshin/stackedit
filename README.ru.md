@@ -28,13 +28,18 @@
 ```bash
 # 1) готовые файлы из релиза
 curl -fL -o stackedit-pwa.tar.gz \
-  https://github.com/DNikulshin/stackedit/releases/download/v5.15.4-ru.1/stackedit-pwa-5.15.4.tar.gz
+  https://github.com/DNikulshin/stackedit/releases/download/v5.15.4-ru.2/stackedit-pwa-5.15.4.tar.gz
 tar xzf stackedit-pwa.tar.gz
 
 # 2) раздать локально и открыть в браузере
 cd stackedit-pwa && python3 -m http.server 8080
 # → http://localhost:8080/app/  → Chrome: «Установить приложение»
 ```
+
+Windows: после распаковки двойной клик по `start-windows.cmd` в папке `stackedit-pwa` (нужен Python 3).
+**Не открывайте `app\index.html` двойным кликом** — по `file://` браузер не читает манифест и
+Service Worker, и Chrome пишет «Файл манифеста отсутствует или недоступен для чтения». Корень раздачи —
+папка `stackedit-pwa` целиком, адрес — `http://localhost:8080/app/`.
 
 Или вообще одной командой, если есть Docker:
 
