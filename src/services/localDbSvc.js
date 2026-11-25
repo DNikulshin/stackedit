@@ -82,6 +82,18 @@ const contentTypes = {
   syncedContent: true,
 };
 
+const itemTypes = new Set(constants.types);
+
+/**
+ * IDs of the store items that may differ from the DB.
+ *
+ * Filled by the mutation subscriber below, so that sync() does not have to walk every
+ * item of the workspace at every change. `null` means "everything may have changed":
+ * that is the state before the first write and after a full scan.
+ */
+let pendingIds = null;
+let pendingDeletes = false;
+
 const hashMap = {};
 constants.types.forEach((type) => {
   hashMap[type] = Object.create(null);
@@ -92,6 +104,7 @@ const localDbSvc = {
   lastTx: 0,
   hashMap,
   connection: null,
+  applyingDbChanges: false,
 
   /**
    * Sync data items stored in the localStorage.
@@ -130,6 +143,13 @@ const localDbSvc = {
    * from the DB since the previous transaction, then write all the changes from the store.
    */
   async sync() {
+    // Take the pending changes now: mutations made during the transaction are kept for the
+    // next one instead of being silently dropped
+    const changedIds = pendingIds;
+    const deleted = pendingDeletes;
+    pendingIds = new Set();
+    pendingDeletes = false;
+
     return new Promise((resolve, reject) => {
       // Create the DB transaction
       this.connection.createTx((tx) => {
@@ -143,7 +163,16 @@ const localDbSvc = {
           }
 
           // Persist all the store changes into the DB
-          this.writeAll(storeItemMap, tx);
+          if (changedIds === null) {
+            // Full pass: nothing is known about the previous state
+            this.writeAll(storeItemMap, tx);
+          } else if (changedIds.size) {
+            this.writeItems(changedIds, storeItemMap, tx);
+          }
+          if (deleted) {
+            // A file may have been deleted without its content, sweep the known items
+            this.removeDeletedItems(storeItemMap, tx);
+          }
           // Sync the localStorage
           this.syncLocalStorage();
           // Done
@@ -180,8 +209,11 @@ const localDbSvc = {
         return;
       }
 
-      // Read the collected changes
-      const storeItemMap = { ...store.getters.allItemsById };
+      // Read the collected changes. The map is copied only when it gets modified below
+      const storeItemMap = changes.length
+        ? { ...store.getters.allItemsById }
+        : store.getters.allItemsById;
+      this.applyingDbChanges = true;
       changes.forEach((item) => {
         this.readDbItem(item, storeItemMap);
         // If item is an old delete marker, remove it from the DB
@@ -189,6 +221,7 @@ const localDbSvc = {
           dbStore.delete(item.id);
         }
       });
+      this.applyingDbChanges = false;
 
       this.lastTx = lastTx;
       cb(storeItemMap);
@@ -197,6 +230,9 @@ const localDbSvc = {
 
   /**
    * Write all changes from the store since previous transaction.
+   *
+   * Used for the first pass only: it walks every known item, which is what makes it
+   * unsuitable for the per-second sync.
    */
   writeAll(storeItemMap, tx) {
     if (silent) {
@@ -207,31 +243,7 @@ const localDbSvc = {
     const incrementedTx = this.lastTx + 1;
 
     // Remove deleted store items
-    Object.keys(this.hashMap).forEach((type) => {
-      // Remove this type only if file is deleted
-      let checker = cb => id => !storeItemMap[id] && cb(id);
-      if (contentTypes[type]) {
-        // For content types, remove item only if file is deleted
-        checker = cb => (id) => {
-          if (!storeItemMap[id]) {
-            const [fileId] = id.split('/');
-            if (!store.state.file.itemsById[fileId]) {
-              cb(id);
-            }
-          }
-        };
-      }
-      Object.keys(this.hashMap[type]).forEach(checker((id) => {
-        // Put a delete marker to notify other tabs
-        dbStore.put({
-          id,
-          type,
-          tx: incrementedTx,
-        });
-        delete this.hashMap[type][id];
-        this.lastTx = incrementedTx;
-      }));
-    });
+    this.removeDeletedItems(storeItemMap, tx);
 
     // Put changes
     Object.entries(storeItemMap).forEach(([, storeItem]) => {
@@ -246,6 +258,101 @@ const localDbSvc = {
         this.lastTx = incrementedTx;
       }
     });
+  },
+
+  /**
+   * Write the items that changed since the previous transaction.
+   */
+  writeItems(changedIds, storeItemMap, tx) {
+    if (silent) {
+      // Skip writing to DB in silent mode
+      return;
+    }
+    const dbStore = tx.objectStore(dbStoreName);
+    const incrementedTx = this.lastTx + 1;
+
+    changedIds.forEach((id) => {
+      const storeItem = storeItemMap[id];
+      if (storeItem) {
+        // Store object has changed
+        if (this.hashMap[storeItem.type][id] !== storeItem.hash) {
+          const item = {
+            ...storeItem,
+            tx: incrementedTx,
+          };
+          dbStore.put(item);
+          this.hashMap[storeItem.type][id] = storeItem.hash;
+          this.lastTx = incrementedTx;
+        }
+        return;
+      }
+
+      // Item has left the store: either it was unloaded, or it was deleted
+      const type = this.getKnownType(id);
+      if (!type || !this.isDeleted(type, id)) {
+        return;
+      }
+      // Put a delete marker to notify other tabs
+      dbStore.put({
+        id,
+        type,
+        tx: incrementedTx,
+      });
+      delete this.hashMap[type][id];
+      this.lastTx = incrementedTx;
+    });
+  },
+
+  /**
+   * Put delete markers for the known items that are not in the store anymore.
+   */
+  removeDeletedItems(storeItemMap, tx) {
+    const dbStore = tx.objectStore(dbStoreName);
+    const incrementedTx = this.lastTx + 1;
+
+    Object.keys(this.hashMap).forEach((type) => {
+      Object.keys(this.hashMap[type]).forEach((id) => {
+        if (storeItemMap[id] || !this.isDeleted(type, id)) {
+          return;
+        }
+        dbStore.put({
+          id,
+          type,
+          tx: incrementedTx,
+        });
+        delete this.hashMap[type][id];
+        this.lastTx = incrementedTx;
+      });
+    });
+  },
+
+  /**
+   * Whether an item that is absent from the store was really deleted.
+   *
+   * Contents and content states are unloaded from the store when they are not opened
+   * recently, so for those types only a deleted file means a deleted item.
+   */
+  isDeleted(type, id) {
+    if (!contentTypes[type]) {
+      return true;
+    }
+    const [fileId] = id.split('/');
+    return !store.state.file.itemsById[fileId];
+  },
+
+  /**
+   * Return the type under which the item is known in the DB, if it is known at all.
+   */
+  getKnownType(id) {
+    let knownType = null;
+    Object.keys(this.hashMap).some((type) => {
+      if (id in this.hashMap[type]) {
+        knownType = type;
+        return true;
+      }
+      return false;
+    });
+    return knownType;
   },
 
   /**
@@ -338,6 +445,26 @@ const localDbSvc = {
       });
       throw new Error('RELOAD');
     }
+
+    // Collect the IDs of the items that the store changes, so that sync() does not have
+    // to compare every known item with the DB once per second. Subscribed here and not at
+    // module level: the store is not available yet when this module is evaluated, because
+    // it imports the store modules that import this service back.
+    store.subscribe((mutation) => {
+      const [moduleName, mutationName] = mutation.type.split('/');
+      if (this.applyingDbChanges || !itemTypes.has(moduleName)) {
+        return;
+      }
+      if (mutationName === 'deleteItem') {
+        pendingDeletes = true;
+      }
+      const { payload } = mutation;
+      const id = typeof payload === 'string' ? payload : payload && payload.id;
+      // While a full pass is pending, collecting single IDs is pointless
+      if (id && pendingIds) {
+        pendingIds.add(id);
+      }
+    });
 
     // Create the connection
     this.connection = new Connection();
@@ -462,5 +589,6 @@ const loader = type => fileId => localDbSvc.loadItem(`${fileId}/${type}`)
   }));
 localDbSvc.loadSyncedContent = loader('syncedContent');
 localDbSvc.loadContentState = loader('contentState');
+
 
 export default localDbSvc;
