@@ -8,7 +8,7 @@
 #   ./scripts/build-local.sh            # полная сборка
 #   ./scripts/build-local.sh --clean    # пересоздать node_modules и dist
 #
-# Требуется: bash, curl или wget, tar, git, python3 (для node-gyp-фолбэков), ~2.5 ГБ на диске.
+# Требуется: bash, curl или wget, tar, git, ~2.5 ГБ на диске.
 # Проверено на Linux x64; для macOS архитектура определяется автоматически.
 
 set -euo pipefail

@@ -26,7 +26,9 @@
 git clone https://github.com/DNikulshin/stackedit.git
 cd stackedit
 ./scripts/build-local.sh          # скачает изолированный Node 14 в .toolchain/ и соберёт dist/
-node .                            # http://localhost:8080/app
+
+# запуск именно этим Node (системный не подойдёт)
+.toolchain/node-v14.21.3-linux-x64/bin/node .   # http://localhost:8080/app
 ```
 
 Открыть <http://localhost:8080/app>. Дальше: установить как приложение (см. [docs/ru/pc.md](docs/ru/pc.md))
@@ -34,7 +36,7 @@ node .                            # http://localhost:8080/app
 
 ## Что работает в самостоятельной сборке, а что нет
 
-Проверено на локальной сборке (Linux, Node 14.21.3):
+Проверено на локальной сборке (Linux x64, Node 14.21.3, `dist/` отдан через `node .`):
 
 | Возможность | Состояние |
 | --- | --- |

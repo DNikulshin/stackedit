@@ -54,8 +54,9 @@ systemctl --user status stackedit
 loginctl enable-linger "$USER"    # чтобы сервис поднимался после перезагрузки без входа в сессию
 ```
 
-Путь в `ExecStart` и `WorkingDirectory` подставьте свои (замените `USER`). Проверялось на обычном
-десктопном дистрибутиве с systemd; в контейнерах/без user-bus команды `systemctl --user` недоступны.
+Путь в `ExecStart` и `WorkingDirectory` подставьте свои (замените `USER`). Юнит — стандартный шаблон;
+в среде, где готовилась эта документация, `systemctl --user` был недоступен (нет user-bus в контейнере),
+поэтому автозапуск не проверялся — после включения посмотрите `systemctl --user status stackedit`.
 
 ### Автозапуск (Windows)
 
